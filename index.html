@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QuickScan MCQ - Teacher App</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 15px; background: #f4f6f8; }
+    h2, h3 { color: #1e293b; margin-top: 0; }
+    .card { background: white; padding: 15px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 15px; }
+    input, textarea, button, select { width: 100%; padding: 10px; margin: 5px 0 10px 0; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
+    button { background: #2563eb; color: white; font-weight: bold; border: none; cursor: pointer; }
+    button.success { background: #16a34a; }
+    video, canvas { width: 100%; border-radius: 8px; background: #000; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 14px; }
+    th { background: #e2e8f0; }
+  </style>
+</head>
+<body>
+
+  <h2>QuickScan MCQ</h2>
+
+  <!-- TAB 1: ROSTER & QUIZ INPUT -->
+  <div class="card">
+    <h3>1. Upload Roster (CSV Format)</h3>
+    <textarea id="rosterInput" rows="3" placeholder="CardNo, Student Name&#10;1, Anitha&#10;2, Rajesh&#10;3, Suresh"></textarea>
+    <button onclick="saveRoster()">Save Roster</button>
+  </div>
+
+  <div class="card">
+    <h3>2. Create Quick Question</h3>
+    <input type="text" id="questionText" placeholder="Question (e.g., Which is rich in carbohydrates?)">
+    <select id="correctAnswer">
+      <option value="">Select Correct Answer Key</option>
+      <option value="A">Option A</option>
+      <option value="B">Option B</option>
+      <option value="C">Option C</option>
+      <option value="D">Option D</option>
+    </select>
+    <button onclick="startScanning()" class="success">Start Camera Scan</button>
+  </div>
+
+  <!-- TAB 2: LIVE CAMERA SCANNER -->
+  <div class="card" id="scannerCard" style="display:none;">
+    <h3>Live Scanning</h3>
+    <video id="video" playsinline></video>
+    <button onclick="stopScanning()">Finish & Consolidate</button>
+  </div>
+
+  <!-- TAB 3: CONSOLIDATED RESULTS -->
+  <div class="card">
+    <h3>3. Consolidated Performance</h3>
+    <div id="summaryStats"><strong>Scanned:</strong> 0 students</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Card #</th>
+          <th>Student Name</th>
+          <th>Answer</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="resultsTable">
+        <tr><td colspan="4">No scans yet.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    let roster = {};
+    let scannedResults = {};
+    let videoStream = null;
+
+    // Save Student Roster into Local Storage
+    function saveRoster() {
+      const text = document.getElementById('rosterInput').value.trim();
+      const lines = text.split('\n');
+      roster = {};
+      
+      lines.forEach(line => {
+        const parts = line.split(',');
+        if(parts.length >= 2) {
+          const cardId = parts[0].trim();
+          const name = parts[1].trim();
+          roster[cardId] = name;
+        }
+      });
+
+      localStorage.setItem('teacher_roster', JSON.stringify(roster));
+      alert('Roster saved! Total students loaded: ' + Object.keys(roster).length);
+    }
+
+    // Start Phone Camera Feed
+    async function startScanning() {
+      const answerKey = document.getElementById('correctAnswer').value;
+      if (!answerKey) {
+        alert('Please select the correct answer key before scanning!');
+        return;
+      }
+
+      document.getElementById('scannerCard').style.display = 'block';
+      const video = document.getElementById('video');
+
+      try {
+        videoStream = await navigator.mediaDevices.getUserMedia({ 
+          video: { facingMode: "environment" } 
+        });
+        video.srcObject = videoStream;
+        video.play();
+      } catch (err) {
+        alert('Camera access denied or unavailable: ' + err);
+      }
+    }
+
+    // Stop Camera
+    function stopScanning() {
+      if (videoStream) {
+        videoStream.getTracks().forEach(track => track.stop());
+      }
+      document.getElementById('scannerCard').style.display = 'none';
+      renderResults();
+    }
+
+    // Render Performance Summary
+    function renderResults() {
+      const answerKey = document.getElementById('correctAnswer').value;
+      const tbody = document.getElementById('resultsTable');
+      tbody.innerHTML = '';
+
+      let totalScanned = Object.keys(scannedResults).length;
+      let correctCount = 0;
+
+      for (let cardId in scannedResults) {
+        const selected = scannedResults[cardId];
+        const studentName = roster[cardId] || "Unknown Student";
+        const isCorrect = (selected === answerKey);
+        if (isCorrect) correctCount++;
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${cardId}</td>
+          <td>${studentName}</td>
+          <td>${selected}</td>
+          <td style="color:${isCorrect ? 'green' : 'red'}; font-weight:bold;">
+            ${isCorrect ? '✓ Correct' : '✗ Incorrect'}
+          </td>
+        `;
+        tbody.appendChild(tr);
+      }
+
+      const percentage = totalScanned > 0 ? Math.round((correctCount / totalScanned) * 100) : 0;
+      document.getElementById('summaryStats').innerHTML = `
+        <strong>Scanned:</strong> ${totalScanned} | 
+        <strong>Correct:</strong> ${correctCount} (${percentage}%)
+      `;
+    }
+
+    // Load saved roster on startup
+    window.onload = function() {
+      const saved = localStorage.getItem('teacher_roster');
+      if (saved) {
+        roster = JSON.parse(saved);
+        document.getElementById('rosterInput').value = Object.entries(roster)
+          .map(([id, name]) => `${id}, ${name}`).join('\n');
+      }
+    };
+  </script>
+</body>
+</html>
