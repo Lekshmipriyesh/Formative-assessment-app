@@ -1,169 +1,332 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QuickScan MCQ - Teacher App</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 0; padding: 15px; background: #f4f6f8; }
-    h2, h3 { color: #1e293b; margin-top: 0; }
-    .card { background: white; padding: 15px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 15px; }
-    input, textarea, button, select { width: 100%; padding: 10px; margin: 5px 0 10px 0; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
-    button { background: #2563eb; color: white; font-weight: bold; border: none; cursor: pointer; }
-    button.success { background: #16a34a; }
-    video, canvas { width: 100%; border-radius: 8px; background: #000; }
-    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 14px; }
-    th { background: #e2e8f0; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Handwritten Chit Response Scanner</title>
+    <!-- Lightweight Styling -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/water.css@2/out/water.css">
+    <!-- Tesseract OCR Engine for Client-Side Recognition -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.1.1/dist/tesseract.min.js"></script>
+    <style>
+        body { max-width: 900px; margin: 15px auto; padding: 0 10px; }
+        .tab-buttons { display: flex; gap: 8px; margin-bottom: 15px; }
+        .tab-buttons button { flex: 1; font-weight: bold; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .card { border: 1px solid #ccc; padding: 15px; border-radius: 8px; margin-bottom: 15px; background: rgba(0,0,0,0.02); }
+        .scanner-container { text-align: center; position: relative; }
+        video { width: 100%; max-width: 450px; border-radius: 8px; background: #000; }
+        canvas { display: none; }
+        .crop-box {
+            position: absolute; top: 30%; left: 25%; width: 50%; height: 35%;
+            border: 3px dashed #ff9800; border-radius: 8px; pointer-events: none;
+            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.4);
+        }
+        .status-box { font-weight: bold; font-size: 1.1em; margin: 10px 0; color: #0275d8; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { padding: 8px; text-align: left; border-bottom: 1px solid #ddd; }
+        .badge { padding: 4px 8px; border-radius: 4px; color: white; font-weight: bold; font-size: 0.85em; }
+        .badge-success { background-color: #2e7d32; }
+        .badge-danger { background-color: #c62828; }
+        .badge-neutral { background-color: #616161; }
+    </style>
 </head>
 <body>
 
-  <h2>QuickScan MCQ</h2>
+    <h2>Handwritten Paper Response Scanner</h2>
 
-  <!-- TAB 1: ROSTER & QUIZ INPUT -->
-  <div class="card">
-    <h3>1. Upload Roster (CSV Format)</h3>
-    <textarea id="rosterInput" rows="3" placeholder="CardNo, Student Name&#10;1, Anitha&#10;2, Rajesh&#10;3, Suresh"></textarea>
-    <button onclick="saveRoster()">Save Roster</button>
-  </div>
+    <div class="tab-buttons">
+        <button onclick="showTab('setup-tab')">1. MCQ & Roster Setup</button>
+        <button onclick="showTab('scanner-tab')">2. Live OCR Scanner</button>
+        <button onclick="showTab('results-tab')">3. Results & Export</button>
+    </div>
 
-  <div class="card">
-    <h3>2. Create Quick Question</h3>
-    <input type="text" id="questionText" placeholder="Question (e.g., Which is rich in carbohydrates?)">
-    <select id="correctAnswer">
-      <option value="">Select Correct Answer Key</option>
-      <option value="A">Option A</option>
-      <option value="B">Option B</option>
-      <option value="C">Option C</option>
-      <option value="D">Option D</option>
-    </select>
-    <button onclick="startScanning()" class="success">Start Camera Scan</button>
-  </div>
+    <!-- TAB 1: SETUP -->
+    <div id="setup-tab" class="tab-content active">
+        <div class="card">
+            <h3>Configure Multiple Choice Question</h3>
+            <label for="q-prompt">Question Prompt:</label>
+            <input type="text" id="q-prompt" placeholder="e.g., What is the capital of France?" style="width: 100%;">
 
-  <!-- TAB 2: LIVE CAMERA SCANNER -->
-  <div class="card" id="scannerCard" style="display:none;">
-    <h3>Live Scanning</h3>
-    <video id="video" playsinline></video>
-    <button onclick="stopScanning()">Finish & Consolidate</button>
-  </div>
+            <h4>Options & Correct Answer:</h4>
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                <input type="radio" name="correct-ans" value="A" checked> <strong>A:</strong>
+                <input type="text" id="opt-A" placeholder="Option A text" style="flex:1;">
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                <input type="radio" name="correct-ans" value="B"> <strong>B:</strong>
+                <input type="text" id="opt-B" placeholder="Option B text" style="flex:1;">
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                <input type="radio" name="correct-ans" value="C"> <strong>C:</strong>
+                <input type="text" id="opt-C" placeholder="Option C text" style="flex:1;">
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                <input type="radio" name="correct-ans" value="D"> <strong>D:</strong>
+                <input type="text" id="opt-D" placeholder="Option D text" style="flex:1;">
+            </div>
+        </div>
 
-  <!-- TAB 3: CONSOLIDATED RESULTS -->
-  <div class="card">
-    <h3>3. Consolidated Performance</h3>
-    <div id="summaryStats"><strong>Scanned:</strong> 0 students</div>
-    <table>
-      <thead>
-        <tr>
-          <th>Card #</th>
-          <th>Student Name</th>
-          <th>Answer</th>
-          <th>Status</th>
-        </tr>
-      </thead>
-      <tbody id="resultsTable">
-        <tr><td colspan="4">No scans yet.</td></tr>
-      </tbody>
-    </table>
-  </div>
+        <div class="card">
+            <h3>Class Student Roster</h3>
+            <label for="roster-input">Enter Student Names or Roll Numbers (One per line):</label>
+            <textarea id="roster-input" rows="8" style="width:100%; font-family:monospace;" placeholder="Student 01&#10;Student 02&#10;Student 03"></textarea>
+            <button onclick="saveSetup()" style="background:#0275d8; color:white; width:100%;">Save Setup & Proceed</button>
+        </div>
+    </div>
 
-  <script>
-    let roster = {};
-    let scannedResults = {};
-    let videoStream = null;
+    <!-- TAB 2: LIVE CAMERA SCANNER -->
+    <div id="scanner-tab" class="tab-content">
+        <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h3>Scanning Target</h3>
+                <span id="scan-progress" style="font-weight:bold;">0 / 0 Scanned</span>
+            </div>
 
-    // Save Student Roster into Local Storage
-    function saveRoster() {
-      const text = document.getElementById('rosterInput').value.trim();
-      const lines = text.split('\n');
-      roster = {};
-      
-      lines.forEach(line => {
-        const parts = line.split(',');
-        if(parts.length >= 2) {
-          const cardId = parts[0].trim();
-          const name = parts[1].trim();
-          roster[cardId] = name;
+            <label for="student-select">Active Student:</label>
+            <select id="student-select" style="font-size:1.1em; padding:6px; width:100%;"></select>
+
+            <div class="scanner-container" style="margin-top:15px;">
+                <div style="position:relative; display:inline-block; width:100%; max-width:450px;">
+                    <video id="video" playsinline></video>
+                    <div class="crop-box"></div>
+                </div>
+                <canvas id="canvas"></canvas>
+
+                <div class="status-box" id="ocr-status">Camera Inactive</div>
+
+                <div style="display:flex; gap:10px; justify-content:center; margin-top:10px;">
+                    <button id="start-btn" onclick="startCamera()" style="background:#2e7d32; color:white;">Start Camera</button>
+                    <button id="snap-btn" onclick="captureAndOCR()" style="background:#ff9800; color:white;" disabled>Scan Paper Chit</button>
+                    <button id="stop-btn" onclick="stopCamera()" style="background:#c62828; color:white;" disabled>Stop Camera</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB 3: RESULTS & EXPORT -->
+    <div id="results-tab" class="tab-content">
+        <div class="card">
+            <h3>Scanned Results Table</h3>
+            <div style="display:flex; gap:10px; margin-bottom:15px;">
+                <button onclick="exportCSV()" style="background:#2e7d32; color:white;">Download CSV File</button>
+                <button onclick="clearResults()" style="background:#c62828; color:white;">Clear Scanned Responses</button>
+            </div>
+
+            <div id="summary-stats" style="font-weight:bold; margin-bottom:10px;"></div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Student Name</th>
+                        <th>Scanned Choice</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="results-table-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        let roster = [];
+        let responses = {};
+        let videoStream = null;
+        let worker = null;
+
+        // Initialize Tesseract Worker for fast offline OCR
+        async function initOCR() {
+            document.getElementById('ocr-status').innerText = 'Initializing OCR Engine...';
+            worker = await Tesseract.createWorker('eng');
+            await worker.setParameters({
+                tessedit_char_whitelist: 'ABCDabcd' // Only recognize letters A, B, C, D
+            });
+            document.getElementById('ocr-status').innerText = 'Camera Inactive (OCR Ready)';
         }
-      });
+        initOCR();
 
-      localStorage.setItem('teacher_roster', JSON.stringify(roster));
-      alert('Roster saved! Total students loaded: ' + Object.keys(roster).length);
-    }
+        function showTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+            if (tabId === 'scanner-tab') updateScannerUI();
+            if (tabId === 'results-tab') renderResultsTable();
+            if (tabId !== 'scanner-tab' && videoStream) stopCamera();
+        }
 
-    // Start Phone Camera Feed
-    async function startScanning() {
-      const answerKey = document.getElementById('correctAnswer').value;
-      if (!answerKey) {
-        alert('Please select the correct answer key before scanning!');
-        return;
-      }
+        function saveSetup() {
+            const rawRoster = document.getElementById('roster-input').value.trim();
+            if (!rawRoster) {
+                alert('Please enter at least one student name/number.');
+                return;
+            }
+            roster = rawRoster.split('\n').map(s => s.trim()).filter(s => s.length > 0);
+            alert(`Setup saved successfully! Total students loaded: ${roster.length}`);
+            showTab('scanner-tab');
+        }
 
-      document.getElementById('scannerCard').style.display = 'block';
-      const video = document.getElementById('video');
+        function updateScannerUI() {
+            const select = document.getElementById('student-select');
+            select.innerHTML = '';
+            
+            if (roster.length === 0) {
+                // Populate default roster if none entered
+                for (let i = 1; i <= 40; i++) roster.push(`Student ${i < 10 ? '0' + i : i}`);
+                document.getElementById('roster-input').value = roster.join('\n');
+            }
 
-      try {
-        videoStream = await navigator.mediaDevices.getUserMedia({ 
-          video: { facingMode: "environment" } 
-        });
-        video.srcObject = videoStream;
-        video.play();
-      } catch (err) {
-        alert('Camera access denied or unavailable: ' + err);
-      }
-    }
+            roster.forEach(name => {
+                const opt = document.createElement('option');
+                opt.value = name;
+                opt.innerText = `${name} ${responses[name] ? ' (Done: ' + responses[name] + ')' : ''}`;
+                select.appendChild(opt);
+            });
 
-    // Stop Camera
-    function stopScanning() {
-      if (videoStream) {
-        videoStream.getTracks().forEach(track => track.stop());
-      }
-      document.getElementById('scannerCard').style.display = 'none';
-      renderResults();
-    }
+            document.getElementById('scan-progress').innerText = `${Object.keys(responses).length} / ${roster.length} Scanned`;
+        }
 
-    // Render Performance Summary
-    function renderResults() {
-      const answerKey = document.getElementById('correctAnswer').value;
-      const tbody = document.getElementById('resultsTable');
-      tbody.innerHTML = '';
+        async function startCamera() {
+            const video = document.getElementById('video');
+            try {
+                videoStream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'environment' }
+                });
+                video.srcObject = videoStream;
+                video.play();
+                document.getElementById('start-btn').disabled = true;
+                document.getElementById('snap-btn').disabled = false;
+                document.getElementById('stop-btn').disabled = false;
+                document.getElementById('ocr-status').innerText = 'Camera active. Frame chit inside orange box & tap "Scan Paper Chit".';
+            } catch (err) {
+                alert('Unable to access mobile camera: ' + err.message);
+            }
+        }
 
-      let totalScanned = Object.keys(scannedResults).length;
-      let correctCount = 0;
+        function stopCamera() {
+            if (videoStream) {
+                videoStream.getTracks().forEach(track => track.stop());
+                videoStream = null;
+            }
+            document.getElementById('start-btn').disabled = false;
+            document.getElementById('snap-btn').disabled = true;
+            document.getElementById('stop-btn').disabled = true;
+            document.getElementById('ocr-status').innerText = 'Camera Stopped.';
+        }
 
-      for (let cardId in scannedResults) {
-        const selected = scannedResults[cardId];
-        const studentName = roster[cardId] || "Unknown Student";
-        const isCorrect = (selected === answerKey);
-        if (isCorrect) correctCount++;
+        async function captureAndOCR() {
+            if (!worker) {
+                alert('OCR Engine is still loading. Please wait a moment.');
+                return;
+            }
 
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${cardId}</td>
-          <td>${studentName}</td>
-          <td>${selected}</td>
-          <td style="color:${isCorrect ? 'green' : 'red'}; font-weight:bold;">
-            ${isCorrect ? '✓ Correct' : '✗ Incorrect'}
-          </td>
-        `;
-        tbody.appendChild(tr);
-      }
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
 
-      const percentage = totalScanned > 0 ? Math.round((correctCount / totalScanned) * 100) : 0;
-      document.getElementById('summaryStats').innerHTML = `
-        <strong>Scanned:</strong> ${totalScanned} | 
-        <strong>Correct:</strong> ${correctCount} (${percentage}%)
-      `;
-    }
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    // Load saved roster on startup
-    window.onload = function() {
-      const saved = localStorage.getItem('teacher_roster');
-      if (saved) {
-        roster = JSON.parse(saved);
-        document.getElementById('rosterInput').value = Object.entries(roster)
-          .map(([id, name]) => `${id}, ${name}`).join('\n');
-      }
-    };
-  </script>
+            // Crop the specific center area defined by the orange box
+            const cropX = canvas.width * 0.25;
+            const cropY = canvas.height * 0.30;
+            const cropWidth = canvas.width * 0.50;
+            const cropHeight = canvas.height * 0.35;
+
+            const croppedCanvas = document.createElement('canvas');
+            croppedCanvas.width = cropWidth;
+            croppedCanvas.height = cropHeight;
+            const cropCtx = croppedCanvas.getContext('2d');
+            cropCtx.drawImage(canvas, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+
+            document.getElementById('ocr-status').innerText = 'Processing image...';
+
+            // Perform OCR on cropped area
+            const result = await worker.recognize(croppedCanvas);
+            const detectedText = result.data.text.replace(/[^ABCDabcd]/g, '').toUpperCase();
+
+            const currentStudent = document.getElementById('student-select').value;
+
+            if (detectedText.length > 0) {
+                const char = detectedText[0]; // Take primary letter detected
+                responses[currentStudent] = char;
+                document.getElementById('ocr-status').innerText = `Success! Recorded '${char}' for ${currentStudent}`;
+                
+                // Auto-advance to next student
+                const select = document.getElementById('student-select');
+                if (select.selectedIndex < select.options.length - 1) {
+                    select.selectedIndex += 1;
+                }
+                updateScannerUI();
+            } else {
+                document.getElementById('ocr-status').innerText = 'Recognition failed. Ensure letter (A, B, C, or D) is written clearly inside box.';
+            }
+        }
+
+        function renderResultsTable() {
+            const tbody = document.getElementById('results-table-body');
+            tbody.innerHTML = '';
+
+            const correctAns = document.querySelector('input[name="correct-ans"]:checked').value;
+            let correctCount = 0;
+            let totalScanned = Object.keys(responses).length;
+
+            roster.forEach((name, index) => {
+                const choice = responses[name] || 'Not Scanned';
+                let statusHtml = '<span class="badge badge-neutral">Pending</span>';
+
+                if (choice !== 'Not Scanned') {
+                    if (choice === correctAns) {
+                        statusHtml = '<span class="badge badge-success">Correct</span>';
+                        correctCount++;
+                    } else {
+                        statusHtml = '<span class="badge badge-danger">Incorrect</span>';
+                    }
+                }
+
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${index + 1}</td>
+                    <td>${name}</td>
+                    <td><strong>${choice}</strong></td>
+                    <td>${statusHtml}</td>
+                `;
+                tbody.appendChild(row);
+            });
+
+            document.getElementById('summary-stats').innerText = 
+                `Total Students: ${roster.length} | Scanned: ${totalScanned} | Correct Responses: ${correctCount} | Correct Answer Key: ${correctAns}`;
+        }
+
+        function clearResults() {
+            if (confirm('Clear all recorded student answers?')) {
+                responses = {};
+                updateScannerUI();
+                renderResultsTable();
+            }
+        }
+
+        function exportCSV() {
+            const qPrompt = document.getElementById('q-prompt').value || 'MCQ_Question';
+            const correctAns = document.querySelector('input[name="correct-ans"]:checked').value;
+
+            let csv = `Question Prompt: "${qPrompt.replace(/"/g, '""')}"\n`;
+            csv += `Correct Answer Key: ${correctAns}\n\n`;
+            csv += `Roll/Index,Student Name,Scanned Response,Is Correct\n`;
+
+            roster.forEach((name, idx) => {
+                const choice = responses[name] || 'N/A';
+                const isCorrect = choice === correctAns ? 'YES' : (choice === 'N/A' ? 'NOT SCANNED' : 'NO');
+                csv += `${idx + 1},"${name}",${choice},${isCorrect}\n`;
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `Class_MCQ_Results_${new Date().toISOString().slice(0, 10)}.csv`;
+            link.click();
+        }
+    </script>
 </body>
 </html>
